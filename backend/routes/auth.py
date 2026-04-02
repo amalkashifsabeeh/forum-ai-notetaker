@@ -46,7 +46,7 @@ def register():
     if errors:
         return error_response("; ".join(errors), 400)
 
-    password_hash = generate_password_hash(password)
+    password_hash = generate_password_hash(password, method="pbkdf2:sha256")
 
     try:
         user = create_user(email=email, name=name, password_hash=password_hash)
