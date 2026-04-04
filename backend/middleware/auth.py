@@ -2,20 +2,31 @@
 Authentication middleware.
 
 This decorator protects routes that require a logged-in user.
-It reads the bearer token from the Authorization header,
-verifies it, and stores the current user in Flask's request context.
+
+It extracts the bearer token from the Authorization header,
+verifies it using the shared auth service, and attaches the
+authenticated user to Flask's request context (`g.user`).
+
+All protected routes can then rely on `g.user` instead of
+re-parsing the token themselves.
 """
 
 from functools import wraps
 from flask import request, g
 
 from utils.responses import error_response
-from services.auth_service import verify_token
+from services.auth import verify_token
 
 
 def auth_required(route_function):
     """
-    Protect a route so only authenticated users can access it.
+    Require authentication for a route.
+
+    Expected header:
+        Authorization: Bearer <token>
+
+    If the token is valid, the user is stored in `g.user`.
+    If not, the request is rejected with a 401 response.
     """
     @wraps(route_function)
     def wrapper(*args, **kwargs):
@@ -37,7 +48,10 @@ def auth_required(route_function):
         if not user:
             return error_response("Invalid or expired token", 401)
 
+        # Attach the authenticated user to the request context
+        # so downstream routes can access it easily.
         g.user = user
+
         return route_function(*args, **kwargs)
 
     return wrapper

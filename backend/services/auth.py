@@ -1,21 +1,42 @@
 """
 Authentication service.
 
-For now this uses mock tokens so protected routes can be tested
-before full JWT integration is finished.
+This module connects the middleware to the existing JWT-based
+authentication system used by /api/auth routes.
+
+It verifies bearer tokens and resolves the corresponding user
+from the database so protected routes can rely on `g.user`.
 """
 
 from typing import Optional
+import jwt
 
-TOKENS = {
-    "prof-token": {"id": 1, "name": "Professor", "email": "prof@example.com"},
-    "student-token": {"id": 2, "name": "Student", "email": "student@example.com"},
-    "ta-token": {"id": 3, "name": "TA User", "email": "ta@example.com"},
-}
+from utils.auth import verify_token as decode_jwt
+from services.user_service import get_user_by_id
 
 
 def verify_token(token: str) -> Optional[dict]:
     """
-    Return the user associated with a token if it is valid.
+    Verify a JWT and return the authenticated user.
+
+    The token is decoded using the shared JWT utility. If valid,
+    the corresponding user is loaded from the database.
+
+    Args:
+        token: Bearer token from the Authorization header.
+
+    Returns:
+        A user dictionary if valid, otherwise None.
     """
-    return TOKENS.get(token)
+    try:
+        payload = decode_jwt(token)
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        return None
+
+    return get_user_by_id(user_id)
