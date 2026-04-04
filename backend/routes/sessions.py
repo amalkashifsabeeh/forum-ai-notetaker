@@ -2,11 +2,18 @@
 Session routes.
 
 A session represents one uploaded course recording.
-This file handles the upload flow and session retrieval.
+
+This file defines the entry points for:
+- retrieving uploaded recordings
+- handling the upload workflow
+
+The upload route is where authentication and permission checks
+are enforced before a recording enters the system. It acts as the
+gateway between the frontend and the backend processing pipeline.
 """
 
-import os
 import uuid
+from pathlib import Path
 from flask import Blueprint, request, current_app, g
 
 from middleware.auth import auth_required
@@ -26,7 +33,10 @@ sessions_bp = Blueprint("sessions", __name__)
 @sessions_bp.route("/", methods=["GET"])
 def get_sessions():
     """
-    Return all sessions.
+    Return all sessions currently stored in the system.
+
+    This is mainly used by the frontend dashboard to display
+    uploaded recordings and their processing status.
     """
     sessions = fetch_all_sessions()
     return success_response("Sessions retrieved successfully", sessions)
@@ -35,7 +45,11 @@ def get_sessions():
 @sessions_bp.route("/<int:session_id>", methods=["GET"])
 def get_session(session_id: int):
     """
-    Return one session by ID.
+    Return a single session by ID.
+
+    This allows the frontend to fetch detailed information
+    about a specific recording, including its status in
+    the processing pipeline.
     """
     session = fetch_one_session(session_id)
 
@@ -49,12 +63,24 @@ def get_session(session_id: int):
 @auth_required
 def upload_session():
     """
-    Upload a recording to a course.
+    Upload a recording and trigger processing.
 
-    Requires:
-    - authenticated user
-    - course_id
-    - user must be TA or professor in that course
+    This route is responsible for validating the request,
+    enforcing permissions, storing the file, and initiating
+    the pipeline.
+
+    Requirements:
+    - the user must be authenticated
+    - a course_id must be provided in the request
+    - the user must be a TA or professor for that course
+
+    Important:
+    The current database schema does not yet link sessions to courses.
+    Because of this, course_id is used only for permission validation
+    at upload time and is not persisted with the session.
+
+    This keeps the permission logic in place without introducing
+    inconsistencies with the existing data model.
     """
 
     if "file" not in request.files:
@@ -78,15 +104,15 @@ def upload_session():
     except ValueError:
         return error_response("course_id must be an integer", 400)
 
-    if not allowed_file(file.filename):
-        return error_response("Unsupported file type", 400)
-
     course = get_course_by_id(course_id)
     if not course:
         return error_response("Course not found", 404)
 
     if not is_ta_or_professor(course_id, g.user["id"]):
         return error_response("Only a TA or professor can upload to this course", 403)
+
+    if not allowed_file(file.filename):
+        return error_response("Unsupported file type", 400)
 
     original_filename = safe_filename(file.filename)
 
@@ -96,21 +122,22 @@ def upload_session():
 
     unique_filename = f"{uuid.uuid4().hex}{file_ext}"
 
-    upload_folder = current_app.config["UPLOAD_FOLDER"]
-    os.makedirs(upload_folder, exist_ok=True)
+    upload_folder = Path(current_app.config["UPLOAD_FOLDER"]).expanduser().resolve()
+    upload_folder.mkdir(parents=True, exist_ok=True)
 
-    file_path = os.path.join(upload_folder, unique_filename)
+    file_path = upload_folder / unique_filename
+    file.save(str(file_path))
 
-    file.save(file_path)
+    # Store a backend-relative path, not an absolute machine path.
+    stored_path = str(Path("uploads") / unique_filename)
 
     session = create_session_record(
         title=title,
-        filename=original_filename,
-        recording_path=file_path,
+        original_filename=original_filename,
+        stored_path=stored_path,
         status="uploaded",
-        course_id=course_id
     )
 
-    trigger_pipeline(file_path, session["id"])
+    trigger_pipeline(stored_path, session["id"])
 
     return success_response("Recording uploaded successfully", session, 201)

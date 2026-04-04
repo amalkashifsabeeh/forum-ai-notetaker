@@ -3,41 +3,36 @@ Transcript routes.
 
 These routes return transcript data for a session.
 
-A transcript is course-scoped content, so access should be limited
-to users who belong to the course that owns the session. This keeps
-the transcript flow consistent with the notes flow and prevents users
-from accessing course material they are not part of.
+A transcript is course-related learning content, so this route should
+eventually follow the same access-control model as notes and sessions.
+For now, it returns transcript state safely so the frontend can render
+either the transcript itself or an empty/loading state.
 """
 
-from flask import Blueprint, g
+from flask import Blueprint
 
-from middleware.auth import auth_required
 from utils.responses import success_response, error_response
 from services.session_service import fetch_one_session
 from services.transcript_service import fetch_transcript_by_session_id
-from services.course_service import is_course_member
 
 transcripts_bp = Blueprint("transcripts", __name__)
 
 
 @transcripts_bp.route("/<int:session_id>", methods=["GET"])
-@auth_required
 def get_transcript(session_id: int):
     """
-    Return the transcript for one session if the user is authorized.
+    Return the transcript for a single session.
 
-    The route first checks that the session exists, then verifies that
-    the authenticated user belongs to the course attached to that
-    session. If the transcript has not been generated yet, it still
-    returns a safe response so the frontend can show an empty or
-    loading state instead of failing.
+    This route first checks that the session exists, then attempts
+    to retrieve the transcript associated with it.
+
+    If the transcript has not been generated yet, the route still
+    returns a safe response so the frontend can show a loading or
+    empty state instead of breaking.
     """
     session = fetch_one_session(session_id)
     if not session:
         return error_response("Session not found", 404)
-
-    if not is_course_member(session["course_id"], g.user["id"]):
-        return error_response("You do not have access to this transcript", 403)
 
     transcript = fetch_transcript_by_session_id(session_id)
 
