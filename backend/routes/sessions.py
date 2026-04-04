@@ -1,17 +1,15 @@
 """
 Session routes.
 
-A session represents one uploaded Forum class recording.
-
-This route file matters because upload is the beginning of the
-whole workflow. Once a recording enters here, the backend can
-store it, create a session record, and trigger the pipeline.
+A session represents one uploaded course recording.
+This file handles the upload flow and session retrieval.
 """
 
 import os
 import uuid
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request, current_app, g
 
+from middleware.auth import auth_required
 from utils.responses import success_response, error_response
 from utils.validators import allowed_file, safe_filename
 from services.session_service import (
@@ -19,6 +17,7 @@ from services.session_service import (
     fetch_all_sessions,
     fetch_one_session,
 )
+from services.course_service import get_course_by_id, is_ta_or_professor
 from pipeline.trigger import trigger_pipeline
 
 sessions_bp = Blueprint("sessions", __name__)
@@ -28,9 +27,6 @@ sessions_bp = Blueprint("sessions", __name__)
 def get_sessions():
     """
     Return all sessions.
-
-    The dashboard uses this route to show all uploaded recordings
-    and their current processing status.
     """
     sessions = fetch_all_sessions()
     return success_response("Sessions retrieved successfully", sessions)
@@ -40,9 +36,6 @@ def get_sessions():
 def get_session(session_id: int):
     """
     Return one session by ID.
-
-    This is useful when the frontend wants the details for
-    a specific uploaded class recording.
     """
     session = fetch_one_session(session_id)
 
@@ -53,15 +46,15 @@ def get_session(session_id: int):
 
 
 @sessions_bp.route("/upload", methods=["POST"])
+@auth_required
 def upload_session():
     """
-    Upload a recording and start the system workflow.
+    Upload a recording to a course.
 
-    The backend does four things here:
-    1. validates the request
-    2. stores the uploaded file
-    3. creates a session record
-    4. triggers the processing pipeline
+    Requires:
+    - authenticated user
+    - course_id
+    - user must be TA or professor in that course
     """
 
     if "file" not in request.files:
@@ -69,6 +62,7 @@ def upload_session():
 
     file = request.files["file"]
     title = request.form.get("title", "").strip()
+    course_id_raw = request.form.get("course_id", "").strip()
 
     if file.filename == "":
         return error_response("No file selected", 400)
@@ -76,15 +70,26 @@ def upload_session():
     if not title:
         return error_response("Title is required", 400)
 
+    if not course_id_raw:
+        return error_response("course_id is required", 400)
+
+    try:
+        course_id = int(course_id_raw)
+    except ValueError:
+        return error_response("course_id must be an integer", 400)
+
     if not allowed_file(file.filename):
         return error_response("Unsupported file type", 400)
 
-    # Keep a cleaned version of the original filename for display.
+    course = get_course_by_id(course_id)
+    if not course:
+        return error_response("Course not found", 404)
+
+    if not is_ta_or_professor(course_id, g.user["id"]):
+        return error_response("Only a TA or professor can upload to this course", 403)
+
     original_filename = safe_filename(file.filename)
 
-    # Store the actual uploaded file using a unique generated name
-    # so two uploads with the same original filename do not overwrite
-    # each other.
     file_ext = ""
     if "." in original_filename:
         file_ext = "." + original_filename.rsplit(".", 1)[1].lower()
@@ -96,22 +101,16 @@ def upload_session():
 
     file_path = os.path.join(upload_folder, unique_filename)
 
-    # Save the uploaded recording locally.
     file.save(file_path)
 
-    # Create a session record through the service layer.
-    # We keep the original cleaned filename in the session metadata
-    # for readability, while the stored path uses the unique name.
     session = create_session_record(
         title=title,
         filename=original_filename,
         recording_path=file_path,
-        status="uploaded"
+        status="uploaded",
+        course_id=course_id
     )
 
-    # Trigger the processing flow.
-    # The internal pipeline is still not my responsibility,
-    # but the backend should still provide the entry point for it.
     trigger_pipeline(file_path, session["id"])
 
     return success_response("Recording uploaded successfully", session, 201)

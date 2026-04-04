@@ -1,13 +1,7 @@
 """
 Session service layer.
 
-This file acts as the boundary between the backend API layer
-and the eventual database layer.
-
-For now I am using in-memory placeholder storage so the backend
-can actually run and be tested before full DB integration is done.
-That way the routes are already stable and the DB teammate can
-later replace the internals without forcing a rewrite of my API code.
+A session represents one uploaded class recording tied to a course.
 """
 
 from typing import Optional
@@ -16,12 +10,15 @@ SESSIONS = []
 NEXT_SESSION_ID = 1
 
 
-def create_session_record(title: str, filename: str, recording_path: str, status: str) -> dict:
+def create_session_record(
+    title: str,
+    filename: str,
+    recording_path: str,
+    status: str,
+    course_id: int
+) -> dict:
     """
-    Create a new session record.
-
-    For now this stores data in memory.
-    Later this function should be replaced with real DB logic.
+    Create a session record tied to a course.
     """
     global NEXT_SESSION_ID
 
@@ -30,7 +27,8 @@ def create_session_record(title: str, filename: str, recording_path: str, status
         "title": title,
         "filename": filename,
         "recording_path": recording_path,
-        "status": status
+        "status": status,
+        "course_id": course_id
     }
 
     SESSIONS.append(session)
@@ -52,12 +50,16 @@ def fetch_one_session(session_id: int) -> Optional[dict]:
     return next((session for session in SESSIONS if session["id"] == session_id), None)
 
 
+def fetch_sessions_for_course(course_id: int) -> list[dict]:
+    """
+    Return all sessions for one course.
+    """
+    return [session for session in SESSIONS if session["course_id"] == course_id]
+
+
 def update_session_status(session_id: int, new_status: str) -> None:
     """
     Update the status of a session.
-
-    This matters because the frontend dashboard needs to know
-    what stage of the workflow a session is currently in.
     """
     session = fetch_one_session(session_id)
     if session:
