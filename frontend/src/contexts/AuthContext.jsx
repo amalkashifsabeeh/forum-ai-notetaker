@@ -1,7 +1,6 @@
-import { createContext, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { loginUser, registerUser, getMe } from "../api/backend";
-
-export const AuthContext = createContext(null);
+import AuthContext from "./authContext";
 
 export default function AuthProvider({ children }) {
   const hasToken = Boolean(localStorage.getItem("token"));
