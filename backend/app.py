@@ -20,6 +20,8 @@ from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
 
+load_dotenv()
+
 from forum_ai_notetaker.db import init_db
 
 # Import route groups
@@ -28,8 +30,6 @@ from routes.transcripts import transcripts_bp
 from routes.notes import notes_bp
 from routes.auth import auth_bp
 from routes.courses import courses_bp
-
-load_dotenv()
 
 
 def create_app():
