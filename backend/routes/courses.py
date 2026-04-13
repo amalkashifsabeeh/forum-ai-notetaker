@@ -19,10 +19,10 @@ from services.course_service import (
     get_course_members,
     get_courses_for_user,
     is_course_member,
-    is_professor,
+    is_instructor,
     join_course_by_invite_code,
-    promote_member_to_ta,
 )
+from services.course_member_service import get_course_member, update_course_member_role
 from utils.responses import error_response, success_response
 
 
@@ -102,15 +102,18 @@ def join_course():
     if not invite_code:
         return error_response("Invite code required", 400)
 
-    membership = join_course_by_invite_code(
+    result = join_course_by_invite_code(
         invite_code,
         {"id": g.user["id"]},
     )
 
-    if not membership:
+    if not result:
         return error_response("Invalid invite code", 404)
 
-    return success_response("Joined course", membership, 201)
+    if result.get("error") == "already_member":
+        return error_response("User is already a member of this course", 409)
+
+    return success_response("Joined course successfully", result, 201)
 
 
 @courses_bp.route("/<int:course_id>", methods=["GET"])
@@ -122,7 +125,7 @@ def get_course_details(course_id: int):
 
         GET /api/courses/<course_id>?user_id=1
 
-    Invite code is only returned if that user is the professor.
+    Invite code is only returned if that user is the instructor.
     """
     user_id_raw = request.args.get("user_id", "").strip()
 
@@ -148,7 +151,7 @@ def get_course_details(course_id: int):
         "members": get_course_members(course_id),
     }
 
-    if is_professor(course_id, user_id):
+    if is_instructor(course_id, user_id):
         data["invite_code"] = course["invite_code"]
 
     return success_response("Course retrieved", data)
@@ -159,7 +162,7 @@ def promote_to_ta(course_id: int):
     """
     Promote a student to TA.
 
-    Since auth middleware is not part of this flow yet, the acting professor
+    Since auth middleware is not part of this flow yet, the acting instructor
     is identified through `actor_user_id` in the request body.
 
     Expected JSON:
@@ -184,14 +187,18 @@ def promote_to_ta(course_id: int):
     except ValueError:
         return error_response("actor_user_id and user_id must be int", 400)
 
-    if not is_professor(course_id, actor_user_id):
-        return error_response("Only professor can promote", 403)
+    if not is_instructor(course_id, actor_user_id):
+        return error_response("Only instructors can promote", 403)
 
-    membership = promote_member_to_ta(course_id, user_id)
-
+    membership = get_course_member(course_id, user_id)
     if not membership:
         return error_response("User not in course", 404)
 
+    updated = update_course_member_role(course_id, user_id, "ta")
+    if not updated:
+        return error_response("No role update was applied", 400)
+
+    membership = get_course_member(course_id, user_id)
     return success_response("Promoted to TA", membership)
 
 
@@ -201,13 +208,13 @@ def update_member_role(course_id: int, user_id: int):
     """
     Update a course member role.
 
-    Only a professor in the same course can promote a member to TA.
+    Only an instructor in the same course can promote a member to TA.
     """
     if not is_course_member(course_id, g.user["id"]):
         return error_response("Requester is not a member of this course", 403)
 
-    if not is_professor(course_id, g.user["id"]):
-        return error_response("Only professors can change member roles", 403)
+    if not is_instructor(course_id, g.user["id"]):
+        return error_response("Only instructors can change member roles", 403)
 
     data = request.get_json(silent=True)
     if data is None:
@@ -217,16 +224,20 @@ def update_member_role(course_id: int, user_id: int):
     if new_role != "ta":
         return error_response("Role must be 'ta' for this endpoint", 400)
 
-    target_member = promote_member_to_ta(course_id, user_id)
+    target_member = get_course_member(course_id, user_id)
     if not target_member:
         return error_response("Target user is not a member of this course", 404)
+
+    updated = update_course_member_role(course_id, user_id, new_role)
+    if not updated:
+        return error_response("No role update was applied", 400)
 
     return success_response(
         "Member role updated successfully",
         {
             "course_id": course_id,
             "user_id": user_id,
-            "role": target_member["role"],
+            "role": new_role,
         },
         200,
     )
