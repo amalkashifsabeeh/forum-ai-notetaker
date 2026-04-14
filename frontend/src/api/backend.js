@@ -19,6 +19,7 @@ async function request(path, options = {}) {
   // the caller handle the redirect (ProtectedRoute will kick to /login).
   if (response.status === 401) {
     localStorage.removeItem("token");
+    window.dispatchEvent(new CustomEvent("auth:expired"));
     throw new Error("Session expired. Please log in again.");
   }
 

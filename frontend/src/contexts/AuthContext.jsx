@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { createContext, useState, useEffect, useCallback } from "react";
 import { loginUser, registerUser, getMe } from "../api/backend";
-import AuthContext from "./authContext";
+
+export const AuthContext = createContext(null);
 
 export default function AuthProvider({ children }) {
   const hasToken = Boolean(localStorage.getItem("token"));
@@ -46,6 +47,11 @@ export default function AuthProvider({ children }) {
     localStorage.removeItem("token");
     setUser(null);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener("auth:expired", logout);
+    return () => window.removeEventListener("auth:expired", logout);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout }}>
