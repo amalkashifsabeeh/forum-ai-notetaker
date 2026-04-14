@@ -1,7 +1,11 @@
 """
-Notes service layer.
+Note service layer.
 
 Connects generated notes to the SQLite database.
+Notes are stored per session and contain structured output derived
+from a transcript, such as a summary, key topics, and action items.
+The service layer keeps this storage logic out of the routes so the
+rest of the backend can interact with notes through a clean interface.
 """
 
 import json
@@ -25,7 +29,16 @@ def _row_to_dict(row) -> dict:
 
 def save_notes(session_id: int, summary: str, topics: list[str], action_items: list[str]) -> None:
     """
-    Save generated notes for a session.
+    Save or overwrite generated notes for a session.
+
+    This function is typically called after the transcript has been
+    processed into a more structured summary.
+
+    Args:
+        session_id: The session these notes belong to.
+        summary: A concise summary of the session.
+        topics: A list of key topics covered.
+        action_items: A list of extracted action items.
     """
     now = datetime.now(timezone.utc).isoformat()
     encoded_topics = json.dumps(topics)
@@ -49,13 +62,23 @@ def save_notes(session_id: int, summary: str, topics: list[str], action_items: l
 
 def get_notes_by_session(session_id: int) -> Optional[dict]:
     """
-    Return generated notes for a session if they exist.
+    Retrieve the notes for a given session.
+
+    If notes have not been generated yet, this returns None.
+    The route layer can use that to show a pending or empty state.
+
+    Args:
+        session_id: The session being requested.
+
+    Returns:
+        The notes object if it exists, otherwise None.
     """
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM notes WHERE session_id = ?",
             (session_id,),
         ).fetchone()
+
     return _row_to_dict(row) if row else None
 
 

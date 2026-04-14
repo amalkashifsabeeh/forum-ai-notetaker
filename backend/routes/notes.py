@@ -3,9 +3,10 @@ Notes routes.
 
 These routes return generated notes for a session.
 
-This is more of an MVP 2 feature, but I am including the route
-structure now so the backend is already shaped around the final
-flow of the app.
+Notes represent processed learning content derived from a recording,
+such as a summary, key topics, and action items. This route allows
+the frontend to retrieve that structured output once it becomes
+available.
 """
 
 from flask import Blueprint
@@ -20,12 +21,14 @@ notes_bp = Blueprint("notes", __name__)
 @notes_bp.route("/session/<int:session_id>", methods=["GET"])
 def get_notes(session_id: int):
     """
-    Return generated notes for one session.
+    Return generated notes for a single session.
 
-    The note viewer would use this route to display:
-    - summary
-    - topics
-    - action items
+    The route first confirms that the session exists, then checks
+    whether notes have been generated for it.
+
+    If notes are not available yet, it still returns a safe response
+    so the frontend can show an empty or pending state rather than
+    failing.
     """
     session = fetch_one_session(session_id)
     if not session:
