@@ -4,6 +4,8 @@ import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
 import Notes from "./pages/Notes";
 import Search from "./pages/Search";
+import CreateCourse from "./pages/CreateCourse";
+import JoinCourse from "./pages/JoinCourse";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -50,6 +52,22 @@ export default function AppRouter() {
         element={
           <ProtectedRoute>
             <Notes />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/courses/create"
+        element={
+          <ProtectedRoute>
+            <CreateCourse />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/courses/join"
+        element={
+          <ProtectedRoute>
+            <JoinCourse />
           </ProtectedRoute>
         }
       />
