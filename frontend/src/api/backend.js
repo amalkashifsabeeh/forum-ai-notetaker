@@ -64,6 +64,32 @@ export function getMe() {
   return request("/api/auth/me");
 }
 
+// --- Courses ---
+
+export function createCourse(name) {
+  return request("/api/courses/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function joinCourse(inviteCode) {
+  return request("/api/courses/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ invite_code: inviteCode }),
+  });
+}
+
+export function getCourses() {
+  return request("/api/courses/");
+}
+
+export function getCourse(courseId) {
+  return request(`/api/courses/${courseId}`);
+}
+
 // --- Sessions ---
 
 export function getSessions() {

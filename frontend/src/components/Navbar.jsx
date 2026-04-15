@@ -10,6 +10,8 @@ export default function Navbar() {
         {user ? (
           <>
             <Link to="/">Dashboard</Link>
+            <Link to="/courses/create">Create Course</Link>
+            <Link to="/courses/join">Join Course</Link>
             <Link to="/upload">Upload</Link>
             <Link to="/search">Search</Link>
           </>
