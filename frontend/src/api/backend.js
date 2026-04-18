@@ -105,7 +105,7 @@ export function updateMemberRole(courseId, userId, role) {
 // --- Sessions ---
 
 export function getSessions() {
-  return request("/api/sessions");
+  return request("/api/sessions/");
 }
 
 export function uploadSession({ title, file }) {
