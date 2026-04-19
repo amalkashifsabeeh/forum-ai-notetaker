@@ -1,27 +1,64 @@
 """
 Transcript service layer.
 
-Like the session service, this is a placeholder interface that
-keeps the backend routes stable even before full DB integration.
+This module connects transcript-related routes and pipeline output
+to the SQLite database.
+
+A transcript belongs to a session and stores the transcribed text
+generated from an uploaded recording.
 """
 
+from datetime import datetime, timezone
 from typing import Optional
 
-TRANSCRIPTS = {}
+from forum_ai_notetaker.db import get_connection
 
 
 def save_transcript(session_id: int, transcript_text: str) -> None:
     """
-    Save transcript data for a session.
+    Save a transcript for a session in the database.
+
+    This is typically called by the processing pipeline after
+    transcription is completed.
+
+    Args:
+        session_id: The session this transcript belongs to.
+        transcript_text: The full transcript text.
     """
-    TRANSCRIPTS[session_id] = {
-        "session_id": session_id,
-        "text": transcript_text
-    }
+    now = datetime.now(timezone.utc).isoformat()
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO transcripts (session_id, content, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, transcript_text, now, now),
+        )
+        conn.commit()
 
 
 def fetch_transcript_by_session_id(session_id: int) -> Optional[dict]:
     """
-    Return transcript data for a session if it exists.
+    Retrieve the transcript associated with a session.
+
+    If no transcript has been generated yet, this returns None.
+    The route layer can use that to return a safe empty or
+    loading state instead of failing.
+
+    Args:
+        session_id: The session being requested.
+
+    Returns:
+        A transcript dictionary if it exists, otherwise None.
     """
-    return TRANSCRIPTS.get(session_id)
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM transcripts
+            WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+
+    return dict(row) if row else None

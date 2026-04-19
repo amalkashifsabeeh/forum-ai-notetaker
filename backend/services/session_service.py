@@ -1,64 +1,144 @@
 """
 Session service layer.
 
-This file acts as the boundary between the backend API layer
-and the eventual database layer.
+This module connects session routes to the SQLite database.
 
-For now I am using in-memory placeholder storage so the backend
-can actually run and be tested before full DB integration is done.
-That way the routes are already stable and the DB teammate can
-later replace the internals without forcing a rewrite of my API code.
+A session represents one uploaded recording plus the metadata
+used to track its processing state through the pipeline.
 """
 
 from typing import Optional
 
-SESSIONS = []
-NEXT_SESSION_ID = 1
+from forum_ai_notetaker.db import get_connection
 
 
-def create_session_record(title: str, filename: str, recording_path: str, status: str) -> dict:
+def _row_to_dict(row) -> dict:
     """
-    Create a new session record.
+    Convert a SQLite row object into a plain dictionary.
 
-    For now this stores data in memory.
-    Later this function should be replaced with real DB logic.
+    Keeping this helper here avoids repeating `dict(row)` across
+    the service layer and keeps the returned shape consistent.
     """
-    global NEXT_SESSION_ID
+    return dict(row)
 
-    session = {
-        "id": NEXT_SESSION_ID,
-        "title": title,
-        "filename": filename,
-        "recording_path": recording_path,
-        "status": status
-    }
 
-    SESSIONS.append(session)
-    NEXT_SESSION_ID += 1
-    return session
+def create_session_record(
+    title: str,
+    original_filename: str,
+    stored_path: str,
+    status: str,
+    course_id: Optional[int] = None,
+) -> dict:
+    """
+    Create and store a new session record.
+
+    This function is called after a recording has been uploaded
+    successfully. It persists the metadata needed for later
+    retrieval and pipeline status tracking.
+
+    Returns:
+        A dictionary representing the newly created session.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO sessions (
+                title,
+                original_filename,
+                stored_path,
+                status,
+                course_id,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            """,
+            (title, original_filename, stored_path, status, course_id),
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+
+    return _row_to_dict(row)
 
 
 def fetch_all_sessions() -> list[dict]:
     """
-    Return all sessions.
+    Return all sessions currently stored in the database.
+
+    Sessions are ordered with the most recent first so the frontend
+    can display newly uploaded recordings at the top.
     """
-    return SESSIONS
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, title, original_filename, stored_path, status, created_at, updated_at
+            FROM sessions
+            ORDER BY id DESC
+            """
+        ).fetchall()
+
+    return [_row_to_dict(row) for row in rows]
+
+
+def fetch_sessions_for_user(user_id: int) -> list[dict]:
+    """
+    Return sessions belonging to courses the user is a member of.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.id, s.title, s.original_filename, s.stored_path,
+                   s.status, s.course_id, s.created_at, s.updated_at
+            FROM sessions s
+            JOIN course_members cm ON cm.course_id = s.course_id
+            WHERE cm.user_id = ?
+            ORDER BY s.created_at DESC
+            """,
+            (user_id,),
+        ).fetchall()
+
+    return [_row_to_dict(row) for row in rows]
 
 
 def fetch_one_session(session_id: int) -> Optional[dict]:
     """
     Return one session by ID.
+
+    Returns:
+        A session dictionary if found, otherwise None.
     """
-    return next((session for session in SESSIONS if session["id"] == session_id), None)
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, title, original_filename, stored_path, status, course_id, created_at, updated_at
+            FROM sessions
+            WHERE id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+
+    return _row_to_dict(row) if row else None
 
 
 def update_session_status(session_id: int, new_status: str) -> None:
     """
-    Update the status of a session.
+    Update the processing status of a session.
 
-    This matters because the frontend dashboard needs to know
-    what stage of the workflow a session is currently in.
+    This is typically called by the pipeline as the recording moves
+    through different stages such as uploaded, processing,
+    transcribed, or notes_generated.
     """
-    session = fetch_one_session(session_id)
-    if session:
-        session["status"] = new_status
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE sessions
+            SET status = ?, updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (new_status, session_id),
+        )
+        conn.commit()
