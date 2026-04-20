@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { uploadSession, getCourses } from "../api/backend";
 
 const ALLOWED_EXTENSIONS = ["mp4", "mp3", "wav", "m4a"];
 
 export default function Upload() {
+  const navigate = useNavigate();
+  const { id: routeCourseId } = useParams();
   const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
   const [courseId, setCourseId] = useState("");
@@ -15,6 +17,7 @@ export default function Upload() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+  const isCourseScoped = Boolean(routeCourseId);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,6 +28,17 @@ export default function Upload() {
           (c) => c.role === "instructor" || c.role === "ta"
         );
         setCourses(eligible);
+        if (routeCourseId) {
+          const matchedCourse = eligible.find(
+            (course) => String(course.id) === routeCourseId
+          );
+          if (!matchedCourse) {
+            setLoadError("You do not have permission to upload to this course.");
+            return;
+          }
+          setCourseId(routeCourseId);
+          return;
+        }
         if (eligible.length === 1) {
           setCourseId(String(eligible[0].id));
         }
@@ -37,7 +51,12 @@ export default function Upload() {
         if (!cancelled) setLoadingCourses(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [routeCourseId]);
+
+  const selectedCourse = useMemo(
+    () => courses.find((course) => String(course.id) === String(courseId)) || null,
+    [courseId, courses]
+  );
 
   function isAllowedFile(candidateFile) {
     if (!candidateFile?.name) return false;
@@ -81,9 +100,21 @@ export default function Upload() {
         file,
         courseId,
       });
+      const createdSession = payload.data;
+      const destinationCourseId = String(courseId);
+
       setMessage(payload.message || "Upload successful.");
       setTitle("");
       setFile(null);
+
+      navigate(`/courses/${destinationCourseId}`, {
+        state: {
+          uploadSuccess: {
+            sessionId: createdSession?.id,
+            title: createdSession?.title || title.trim(),
+          },
+        },
+      });
     } catch (err) {
       setError(err.message || "Upload failed.");
     } finally {
@@ -128,7 +159,21 @@ export default function Upload() {
 
   return (
     <div className="container">
-      <h1>Upload Session</h1>
+      <div className="page-header">
+        <div>
+          <h1>Upload Session</h1>
+          <p className="muted-text">
+            {selectedCourse
+              ? `Uploading into ${selectedCourse.name}.`
+              : "Choose the course this recording belongs to."}
+          </p>
+        </div>
+        {selectedCourse ? (
+          <Link to={`/courses/${selectedCourse.id}`} className="btn-link btn-link--secondary">
+            Back to course
+          </Link>
+        ) : null}
+      </div>
 
       <form className="upload-form" onSubmit={handleSubmit}>
         <div className="form-field">
@@ -137,7 +182,7 @@ export default function Upload() {
             id="course"
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
-            disabled={loading}
+            disabled={loading || isCourseScoped}
           >
             <option value="">Select a course</option>
             {courses.map((c) => (
