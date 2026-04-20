@@ -5,7 +5,8 @@ schema without breaking existing data or requiring a full database reset.
 """
 
 import sqlite3
-from pathlib import Path
+
+from forum_ai_notetaker.db import DEFAULT_DB_PATH
 
 
 def migrate_add_segments_column() -> None:
@@ -15,8 +16,7 @@ def migrate_add_segments_column() -> None:
     exists, it does nothing. If the database doesn't exist yet, the
     schema.sql will create it with the column on first init.
     """
-    db_dir = Path(__file__).parent
-    db_path = db_dir / "forum_ai_notetaker.db"
+    db_path = DEFAULT_DB_PATH
 
     # If DB doesn't exist yet, schema.sql will handle it on init_db().
     if not db_path.exists():
