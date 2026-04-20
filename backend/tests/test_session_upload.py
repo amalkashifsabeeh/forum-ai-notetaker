@@ -192,6 +192,44 @@ class SessionUploadTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "course_id is required")
 
+    def test_upload_requires_integer_course_id(self):
+        response = self.post_upload(
+            user=self.instructor_user,
+            course_id="abc",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "course_id must be an integer")
+
+    def test_upload_returns_not_found_for_missing_course(self):
+        response = self.post_upload(
+            user=self.instructor_user,
+            course_id="999",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.get_json()["error"], "Course not found")
+
+    def test_upload_rejects_students_without_upload_permission(self):
+        response = self.post_upload(
+            user=self.student_user,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.get_json()["error"],
+            "Only a TA or instructor can upload to this course",
+        )
+
+    def test_upload_rejects_unsupported_file_types(self):
+        response = self.post_upload(
+            user=self.instructor_user,
+            filename="notes.txt",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "Unsupported file type")
+
 
 if __name__ == "__main__":
     unittest.main()
