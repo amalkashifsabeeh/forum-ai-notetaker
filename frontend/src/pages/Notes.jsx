@@ -71,11 +71,20 @@ export default function Notes() {
 
   const status = session?.status;
 
+  const STATUS_LABELS = {
+    uploaded: "Uploaded",
+    processing: "Processing",
+    transcribed: "Transcribed",
+    notes_generated: "Ready",
+    failed: "Failed",
+  };
+  const KNOWN_STATUSES = Object.keys(STATUS_LABELS);
+
   return (
     <div className="container">
       <h1>{session?.title || `Session ${id}`}</h1>
       {status ? (
-        <p className="muted-text">Status: {status}</p>
+        <p className="muted-text">Status: {STATUS_LABELS[status] || status}</p>
       ) : null}
 
       {status === "processing" ? (
@@ -120,7 +129,7 @@ export default function Notes() {
       ) : null}
 
       {!transcript && !notes && status &&
-       !["processing", "failed", "uploaded", "transcribed"].includes(status) ? (
+       !KNOWN_STATUSES.includes(status) ? (
         <p className="muted-text">Content not yet available.</p>
       ) : null}
     </div>
