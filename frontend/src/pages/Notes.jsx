@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getSession, getNotes, getTranscript } from "../api/backend";
 import {
   getSessionStatusLabel,
   SESSION_STATUS_LABELS,
 } from "../utils/sessionStatus";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "mkv"]);
+
+function getFileExtension(filename) {
+  if (!filename || !filename.includes(".")) return "";
+  return filename.split(".").pop().toLowerCase();
+}
 
 function formatTimestamp(value) {
   if (!value) return "Unknown";
@@ -32,6 +40,27 @@ export default function Notes() {
   const [session, setSession] = useState(null);
   const [transcript, setTranscript] = useState(null);
   const [notes, setNotes] = useState(null);
+  const mediaRef = useRef(null);
+
+  const mediaUrl = useMemo(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return "";
+    const params = new URLSearchParams({ token });
+    return `${API_BASE}/api/sessions/${id}/media?${params.toString()}`;
+  }, [id]);
+
+  const isVideo = VIDEO_EXTENSIONS.has(
+    getFileExtension(session?.original_filename)
+  );
+
+  function handleSegmentClick(startSeconds) {
+    const el = mediaRef.current;
+    if (!el) return;
+    el.currentTime = Math.max(0, Number(startSeconds) || 0);
+    el.play().catch(() => {
+      // Autoplay blocked or not ready yet — leave the seek in place.
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +210,31 @@ export default function Notes() {
         ) : null}
       </section>
 
+      {mediaUrl && hasTranscript ? (
+        <section className="notes-section">
+          <h2 className="section-heading">Recording</h2>
+          <div className="notes-block">
+            {isVideo ? (
+              <video
+                ref={mediaRef}
+                src={mediaUrl}
+                controls
+                preload="metadata"
+                style={{ width: "100%", maxHeight: "420px" }}
+              />
+            ) : (
+              <audio
+                ref={mediaRef}
+                src={mediaUrl}
+                controls
+                preload="metadata"
+                style={{ width: "100%" }}
+              />
+            )}
+          </div>
+        </section>
+      ) : null}
+
       <section className="notes-section">
         <h2 className="section-heading">Transcript</h2>
 
@@ -190,9 +244,14 @@ export default function Notes() {
               <ol className="transcript-segments">
                 {segments.map((seg, index) => (
                   <li key={`${seg.start}-${index}`}>
-                    <span className="transcript-timestamp">
+                    <button
+                      type="button"
+                      className="transcript-timestamp transcript-seek"
+                      onClick={() => handleSegmentClick(seg.start)}
+                      title="Jump to this moment"
+                    >
                       {formatSegmentTime(seg.start)}
-                    </span>
+                    </button>
                     <span className="transcript-text">{seg.text}</span>
                   </li>
                 ))}
