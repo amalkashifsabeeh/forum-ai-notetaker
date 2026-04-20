@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
+    user_type TEXT NOT NULL DEFAULT 'student'
+        CHECK (user_type IN ('student', 'professor')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
