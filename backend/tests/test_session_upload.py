@@ -105,6 +105,52 @@ class SessionUploadTests(unittest.TestCase):
                 content_type="multipart/form-data",
             )
 
+    @patch("routes.sessions.trigger_pipeline")
+    def test_upload_creates_session_saves_file_and_triggers_pipeline(self, mock_trigger_pipeline):
+        response = self.post_upload(
+            user=self.instructor_user,
+            title="Week 1 Lecture",
+            course_id="1",
+            filename="Lecture 1!.MP3",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        payload = response.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["message"], "Recording uploaded successfully")
+
+        session = payload["data"]
+        self.assertEqual(session["title"], "Week 1 Lecture")
+        self.assertEqual(session["course_id"], 1)
+        self.assertEqual(session["status"], "uploaded")
+        self.assertEqual(session["original_filename"], "Lecture_1.MP3")
+        self.assertTrue(session["stored_path"].startswith("uploads/"))
+
+        stored_filename = Path(session["stored_path"]).name
+        saved_file = Path(self.app.config["UPLOAD_FOLDER"]) / stored_filename
+        self.assertTrue(saved_file.exists())
+        self.assertEqual(saved_file.read_bytes(), b"fake audio bytes")
+
+        with db.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT title, original_filename, stored_path, status, course_id
+                FROM sessions
+                WHERE id = ?
+                """,
+                (session["id"],),
+            ).fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["title"], "Week 1 Lecture")
+        self.assertEqual(row["original_filename"], "Lecture_1.MP3")
+        self.assertEqual(row["stored_path"], session["stored_path"])
+        self.assertEqual(row["status"], "uploaded")
+        self.assertEqual(row["course_id"], 1)
+
+        mock_trigger_pipeline.assert_called_once_with(session["stored_path"], session["id"])
+
 
 if __name__ == "__main__":
     unittest.main()
