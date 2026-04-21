@@ -64,16 +64,26 @@ export default function Search() {
 
       {results.length > 0 ? (
         <ul className="session-list">
-          {results.map((session) => (
-            <li className="session-card" key={session.id}>
+          {results.map((result) => (
+            <li className="session-card" key={result.session_id}>
               <div>
-                <strong>{session.title}</strong>
-                <p className="muted-text">{session.original_filename}</p>
+                <strong>{result.title}</strong>
                 <p className="muted-text">
-                  Status: {getSessionStatusLabel(session.status)}
+                  Status: {getSessionStatusLabel(result.status)}
                 </p>
+                {result.matched_in?.length > 0 ? (
+                  <p className="muted-text">
+                    Matched in: {result.matched_in.join(", ")}
+                  </p>
+                ) : null}
+                {result.transcript_snippet ? (
+                  <p className="muted-text">{result.transcript_snippet}</p>
+                ) : null}
+                {result.notes_snippet ? (
+                  <p className="muted-text">{result.notes_snippet}</p>
+                ) : null}
               </div>
-              <Link to={`/notes/${session.id}`}>View transcript/notes</Link>
+              <Link to={`/notes/${result.session_id}`}>View transcript/notes</Link>
             </li>
           ))}
         </ul>
