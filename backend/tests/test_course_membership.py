@@ -246,6 +246,23 @@ class CourseMembershipTests(unittest.TestCase):
         self.assertEqual(data["your_role"], "instructor")
         self.assertEqual(data["invite_code"], "ALGO01")
 
+    def test_non_member_cannot_view_course_details(self):
+        """Non-members should be denied access to course detail data."""
+        response = self.get_json("/api/courses/1", user=self.outsider_user)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "Access denied")
+
+    def test_non_member_cannot_view_course_sessions(self):
+        """Non-members should be denied access to the course sessions listing."""
+        response = self.get_json("/api/courses/1/sessions", user=self.outsider_user)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.get_json()["error"],
+            "You are not a member of this course",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
