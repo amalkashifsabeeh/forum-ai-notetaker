@@ -109,6 +109,47 @@ class CourseMembershipTests(unittest.TestCase):
         with patch("middleware.auth.verify_token", return_value=user):
             return self.client.get(path, headers=headers)
 
+    def test_student_can_join_course_with_valid_invite_code(self):
+        """
+        A student with a valid invite code should join as a student member.
+
+        The route should return the course and membership payload and
+        persist a new course_members row in the database.
+        """
+        response = self.post_json(
+            "/api/courses/join",
+            user=self.outsider_user,
+            json={"invite_code": "ALGO01"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        payload = response.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["message"], "Joined course successfully")
+
+        data = payload["data"]
+        self.assertEqual(data["course"]["id"], 1)
+        self.assertEqual(data["course"]["name"], "Algorithms")
+        self.assertEqual(data["membership"]["course_id"], 1)
+        self.assertEqual(data["membership"]["user_id"], 3)
+        self.assertEqual(data["membership"]["role"], "student")
+
+        with db.get_connection() as conn:
+            membership = conn.execute(
+                """
+                SELECT course_id, user_id, role
+                FROM course_members
+                WHERE course_id = ? AND user_id = ?
+                """,
+                (1, 3),
+            ).fetchone()
+
+        self.assertIsNotNone(membership)
+        self.assertEqual(membership["course_id"], 1)
+        self.assertEqual(membership["user_id"], 3)
+        self.assertEqual(membership["role"], "student")
+
 
 if __name__ == "__main__":
     unittest.main()
