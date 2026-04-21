@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+from typing import Optional
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -155,7 +156,7 @@ def _call_groq_for_chunk(client: Groq, chunk_text: str) -> dict:
 _JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 
 
-def _strip_json_fences(content: str | None) -> str:
+def _strip_json_fences(content: Optional[str]) -> str:
     """
     Remove ```json ... ``` fences that models sometimes wrap JSON in,
     even when asked for raw JSON.
