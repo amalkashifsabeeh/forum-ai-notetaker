@@ -212,7 +212,7 @@ def update_session_status(session_id: int, new_status: str) -> None:
         conn.commit()
 
 
-    def recover_interrupted_processing_sessions() -> None:
+def recover_interrupted_processing_sessions() -> None:
     """
     Mark any sessions stuck in processing as failed on startup.
     """
